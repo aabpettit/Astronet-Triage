@@ -25,7 +25,8 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 import random
-
+from astronet.astro_cnn_model import configurations
+from scipy import stats
 
 def build_dataset(file_pattern,
                   input_config,
@@ -53,7 +54,6 @@ def build_dataset(file_pattern,
 
         parsed_features = tf.io.parse_single_example(serialized_example, features=data_fields)
         
-
         
         if include_labels:
             label_features = [parsed_features.pop(name) for name in input_config.label_columns]
@@ -121,84 +121,43 @@ def build_dataset(file_pattern,
 #    false_rand = false_rand.filter(lambda x,z: z==1)
 #    ds_new = ds_new.filter(lambda image,y: y ==True)
     
-    
-    
-    globals  = ['global_mask', 'global_std', 'global_transit_mask', 'global_view', 'global_view_0.3', 'global_view_5.0', 'global_view_double_period', 'global_view_double_period_0.3', 'global_view_double_period_5.0']
-    locals   =['local_mask','local_std','local_std_even','local_std_odd','local_view','local_view_0.3','local_view_5.0','local_view_even','local_view_half_period_std','local_view_odd']
-    secondaries = ['secondary_mask','secondary_std','secondary_view','secondary_view_0.3','secondary_view_5.0']
-    all  = ['global_mask', 'global_std', 'global_transit_mask', 'global_view', 'global_view_0.3', 'global_view_5.0', 'global_view_double_period', 'global_view_double_period_0.3', 'global_view_double_period_5.0','local_mask','local_std','local_std_even','local_std_odd','local_view','local_view_0.3','local_view_5.0','local_view_even','local_view_half_period_std','local_view_odd','secondary_mask','secondary_std','secondary_view','secondary_view_0.3','secondary_view_5.0']
-    
+    features = list(configurations.final_alpha_0()['inputs']['features'].keys())
+    globals = [feature for feature in features if 'global' in feature]
+    locals = [feature for feature in features if 'local' in feature]
+    secondaries = [feature for feature in features if 'secondary' in feature]
+    all = globals+locals+secondaries
 
-    def add_noise_global(image,y):
-        for a in globals: 
+
+    def add_noise(image,y):
+        for a in array_noise:
             z = image[0][a]
-            noise = tf.random.normal(shape=z.get_shape(), mean=0.0, stddev=0.1, dtype=tf.float32)
+            noise = 1.48*stats.median_absolute_deviation(z, scale=1)
             image[0][a] = tf.math.add(z,noise)
         return image[0],image[1],image[2]
     
-    def add_noise_local(image,y):
-        for a in locals: 
-            z = image[0][a]
-            noise = tf.random.normal(shape=z.get_shape(), mean=0.0, stddev=0.1, dtype=tf.float32)
-            image[0][a] = tf.math.add(z,noise)
-        return image[0],image[1],image[2]
-        
-    def add_noise_secondary(image,y):
-        for a in secondaries: 
-            z = image[0][a]
-            noise = tf.random.normal(shape=z.get_shape(), mean=0.0, stddev=0.1, dtype=tf.float32)
-            image[0][a] = tf.math.add(z,noise)
-        return image[0],image[1],image[2]
+    #if reversing entire dataset- not specific dispostions (so NOT using ds_new) #
     
-    
-    def reverse_global(image,x,y):
-        for g in globals:
-            z = image[g]
-            image[g] = tf.reverse(z,[0])
+    def reverse(image,x,y):
+        for a in all:
+            z = image[a]
+            image[a]=tf.reverse(z,[0])
         return image,x,y
     
-    def reverse_local(image,y):
-        for g in locals:
-            z = image[0][g]
-            image[0][g] = tf.reverse(z,[0])
+    #if not reversing entire dataset- not specific dispostions (using ds_new) #   
+    
+    def reverse(image,y):
+        for a in all:
+            z = image[0][a]
+            image[0][a]= tf.reverse(z,[0])
         return image[0],image[1],image[2]
-    
-    def reverse_secondary(image,y):
-        for g in secondaries:
-            z = image[0][g]
-            image[0][g] = tf.reverse(z,[0])
-        return image[0],image[1],image[2]
-    
-    def reverse_all(image,y):
-        for g in all:
-            z = image[0][g]
-            image[0][g] = tf.reverse(z,[0])
-        return image[0],image[1],image[2]
-    
-    
-    def repeat_disps(image,y):
-        z = image[0]
-        
-        return z,image[1],image[2]
-    
-    def return_false(x,y):
-        return x[0][0],x[0][1],x[0][2]
-    
-    def return_true(x,y):
-        return x[0],x[1],x[2]    
-    
   
 
 ###### Only augment data in the training set, us ds/ds_new depending on whether all data or only disps E,N,B, or S are being augmented  ######
     
     if shuffle_filenames:
         
-    #    false_ds = false_rand.map(return_false)
-    #    true_ds = ds_new.map(return_true)
-    #    ds = false_ds.concatenate(true_ds)                 
-    #    ds_repeat = ds_new.map(repeat_disps)
-        ds_local =  ds_new.map(reverse_local)
-        ds_global = ds_new.map(add_noise_global)
+        reverse =  ds_new.map(reverse)
+        noisy_global = ds_new.map(add_noise)
         
         combined_data = ds.concatenate(ds_local)
         combined_data = combined_data.concatenate(ds_global)
