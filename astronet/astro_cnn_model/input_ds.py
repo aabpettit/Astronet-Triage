@@ -126,41 +126,56 @@ def build_dataset(file_pattern,
     locals = [feature for feature in features if 'local' in feature]
     secondaries = [feature for feature in features if 'secondary' in feature]
     all = globals+locals+secondaries
+    
+    def noise_array(array):
+      array_new = [feature for feature in array if 'mask' not in feature if 'std' not in feature]
+      return(array_new)
+                
+    array_reverse = secondaries  
+    array_noise = noise_array(secondaries)
 
-
-    def add_noise(image,y):
+    #if reversing entire dataset- not specific dispostions (so NOT using ds_new) image is a dictionary corresponding with all the lightcurve data, x is an array corresponding to the dispositions, y takes a value between 1 and 0
+    
+    def add_noise_all(image,x,y):
         for a in array_noise:
             z = image[0][a]
-            noise = 1.48*stats.median_absolute_deviation(z, scale=1)
+            std = 1.48*stats.median_absolute_deviation(z, scale=1,nan_policy='omit')
+            noise = tf.random.normal(shape=z.get_shape(), mean=0.0, stddev=std, dtype=tf.float32)
             image[0][a] = tf.math.add(z,noise)
-        return image[0],image[1],image[2]
+        return image[0],image[1],image[2]   
     
-    #if reversing entire dataset- not specific dispostions (so NOT using ds_new) #
-    
-    def reverse(image,x,y):
+    def reverse_all(image,x,y):
         for a in all:
             z = image[a]
             image[a]=tf.reverse(z,[0])
         return image,x,y
     
-    #if not reversing entire dataset- not specific dispostions (using ds_new) #   
+    #if not reversing entire dataset- not specific dispostions (using ds_new)- image here is an array with the image dictionary, x, and y, and y here is the array corresponding to the dispositions, used to filter the dataset 
     
     def reverse(image,y):
         for a in all:
             z = image[0][a]
             image[0][a]= tf.reverse(z,[0])
         return image[0],image[1],image[2]
-  
+      
+    def add_noise(image,y):
+        for a in array_noise:
+            z = image[0][a]
+            std = 1.48*stats.median_absolute_deviation(z, scale=1,nan_policy='omit')
+            noise = tf.random.normal(shape=z.get_shape(), mean=0.0, stddev=std, dtype=tf.float32)
+            image[0][a] = tf.math.add(z,noise)
+        return image[0],image[1],image[2]
+    
 
 ###### Only augment data in the training set, us ds/ds_new depending on whether all data or only disps E,N,B, or S are being augmented  ######
     
     if shuffle_filenames:
         
-        reverse =  ds_new.map(reverse)
-        noisy_global = ds_new.map(add_noise)
+        reversed =  ds.map(reverse_all)
+        noisy = ds_new.map(add_noise)
         
-        combined_data = ds.concatenate(ds_local)
-        combined_data = combined_data.concatenate(ds_global)
+        combined_data = ds.concatenate(reversed)
+        combined_data = combined_data.concatenate(noisy)
         ds = combined_data
 
     
