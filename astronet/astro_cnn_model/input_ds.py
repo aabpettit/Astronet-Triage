@@ -138,11 +138,11 @@ def build_dataset(file_pattern,
     
     def add_noise_all(image,x,y):
         for a in array_noise:
-            z = image[0][a]
+            z = image[a]
             std = 1.48*stats.median_absolute_deviation(z, scale=1,nan_policy='omit')
             noise = tf.random.normal(shape=z.get_shape(), mean=0.0, stddev=std, dtype=tf.float32)
-            image[0][a] = tf.math.add(z,noise)
-        return image[0],image[1],image[2]   
+            image[a] = tf.math.add(z,noise)
+        return image,x,y  
     
     def reverse_all(image,x,y):
         for a in all:
